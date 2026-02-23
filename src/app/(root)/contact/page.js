@@ -83,19 +83,32 @@ export default function Contact() {
     setStatus({ type: "", text: "" });
 
     try {
-      const endpoint = process.env.NEXT_PUBLIC_CONTACT_API || "/api/contact";
+      const configuredEndpoint = (process.env.NEXT_PUBLIC_CONTACT_API || "").trim();
+      const endpoint =
+        configuredEndpoint &&
+        !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(configuredEndpoint)
+          ? configuredEndpoint
+          : "/api/contact";
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form)
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error("বার্তা পাঠানো যায়নি। আবার চেষ্টা করুন।");
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
       }
 
-      const okText = "আপনার বার্তা সফলভাবে পাঠানো হয়েছে। আমরা দ্রুত যোগাযোগ করব।";
+      if (!response.ok) {
+        const details = [data?.message, data?.notifications].filter(Boolean).join(" ");
+        throw new Error(details || "বার্তা পাঠানো যায়নি। আবার চেষ্টা করুন।");
+      }
+
+      const okText = data?.message || "আপনার বার্তা সফলভাবে পাঠানো হয়েছে। আমরা দ্রুত যোগাযোগ করব।";
 
       setStatus({ type: "success", text: okText });
       setPopup({ open: true, title: "সফল", text: okText });
