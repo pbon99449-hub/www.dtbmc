@@ -184,9 +184,9 @@ export default function Gallery() {
   return (
     <main className="bg-[#DDF3FF] text-[#123B4A] py-20 px-6 md:px-20">
       <div className="max-w-6xl mx-auto text-center mb-12">
-        <h1 className="text-4xl font-bold text-[#2A7F9E]">Gallery</h1>
+        <h1 className="text-4xl font-bold text-[#2A7F9E]">গ্যালারি</h1>
         <p className="text-[#123B4A] mt-4">
-          Browse our campus and events, and now post your own photos too.
+          আমাদের ক্যাম্পাস ও বিভিন্ন ইভেন্ট ঘুরে দেখুন, আর এখন আপনিও আপনার নিজের ছবি পোস্ট করুন।
         </p>
       </div>
 
@@ -197,18 +197,18 @@ export default function Gallery() {
         transition={{ duration: 0.5 }}
         className="mx-auto mb-12 max-w-4xl rounded-2xl border border-[#A9D4DE] bg-[#EAFBFF] p-6 shadow-sm"
       >
-        <h2 className="mb-4 text-xl font-semibold text-[#2A7F9E]">Post Your Picture</h2>
+        <h2 className="mb-4 text-xl font-semibold text-[#2A7F9E]">আপনার ছবি পোস্ট করুন</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <input
             type="text"
-            placeholder="Your name"
+            placeholder="আপনার নাম"
             value={form.author}
             onChange={(event) => setForm((prev) => ({ ...prev, author: event.target.value }))}
             className="w-full rounded-lg border border-[#A9D4DE] bg-[#EAFBFF] px-4 py-3 text-sm outline-none focus:border-[#4FBBC6]"
           />
           <input
             type="text"
-            placeholder="Caption"
+            placeholder="ক্যাপশন"
             value={form.caption}
             onChange={(event) => setForm((prev) => ({ ...prev, caption: event.target.value }))}
             className="w-full rounded-lg border border-[#A9D4DE] bg-[#EAFBFF] px-4 py-3 text-sm outline-none focus:border-[#4FBBC6]"
@@ -255,7 +255,11 @@ export default function Gallery() {
                 transition={{ duration: 0.4, delay: index * 0.05 }}
                 className="overflow-hidden rounded-2xl shadow-lg bg-[#EAFBFF]"
               >
-                <img src={post.imageUrl} alt={post.caption || "Community post"} className="h-64 w-full object-cover" />
+                <img
+                  src={post.imageUrl}
+                  alt={post.caption || "Community post"}
+                  className="h-64 w-full object-cover"
+                />
                 <div className="p-4">
                   <p className="text-sm font-semibold text-[#123B4A]">{post.author || "Anonymous"}</p>
                   <p className="mt-1 text-sm text-[#123B4A]">{post.caption || "New gallery post"}</p>

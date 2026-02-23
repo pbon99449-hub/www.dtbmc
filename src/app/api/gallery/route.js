@@ -1,38 +1,69 @@
 import { NextResponse } from "next/server";
+import {
+  deleteImageFromCloudinary,
+  getMediaConfigError,
+  getSupabaseAdmin,
+  uploadImageToCloudinary
+} from "../../../lib/server/mediaStore";
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
-const STORE_KEY = "__gallery_posts__";
+const TABLE_NAME = "gallery_posts";
 
 function sanitize(value, max = 240) {
   return String(value || "").trim().slice(0, max);
 }
 
-function getStore() {
-  if (!globalThis[STORE_KEY]) {
-    globalThis[STORE_KEY] = [];
-  }
-  return globalThis[STORE_KEY];
+function getErrorMessage(error, fallback) {
+  const message = String(error?.message || "").trim();
+  return message || fallback;
 }
 
 function toPublicPost(post, ownerToken = "") {
   return {
     id: post.id,
-    author: post.author,
-    caption: post.caption,
-    imageUrl: post.imageUrl,
-    createdAt: post.createdAt,
-    canDelete: !!ownerToken && post.ownerToken === ownerToken
+    author: post.author || "Anonymous",
+    caption: post.caption || "New gallery post",
+    imageUrl: post.image_url,
+    createdAt: post.created_at,
+    canDelete: !!ownerToken && post.owner_token === ownerToken
   };
 }
 
 export async function GET(request) {
+  const configError = getMediaConfigError();
+  if (configError) {
+    return NextResponse.json({ message: configError, posts: [] }, { status: 500 });
+  }
+
   const ownerToken = sanitize(request.headers.get("x-gallery-owner-token"), 160);
-  const posts = getStore();
-  return NextResponse.json({ posts: posts.map((post) => toPublicPost(post, ownerToken)) });
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from(TABLE_NAME)
+      .select("id,author,caption,image_url,owner_token,created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new Error(error.message || "Failed to read posts.");
+    }
+
+    return NextResponse.json({ posts: (data || []).map((post) => toPublicPost(post, ownerToken)) });
+  } catch (error) {
+    return NextResponse.json(
+      { message: getErrorMessage(error, "Could not load gallery posts right now."), posts: [] },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request) {
+  const configError = getMediaConfigError();
+  if (configError) {
+    return NextResponse.json({ message: configError }, { status: 500 });
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get("image");
@@ -56,32 +87,47 @@ export async function POST(request) {
       return NextResponse.json({ message: "Image size must be 3MB or less." }, { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const base64 = Buffer.from(bytes).toString("base64");
-    const imageUrl = `data:${file.type};base64,${base64}`;
-
+    const supabase = getSupabaseAdmin();
+    const upload = await uploadImageToCloudinary(file, "collage/gallery");
     const post = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       author: author || "Anonymous",
       caption: caption || "New gallery post",
-      imageUrl,
-      createdAt: new Date().toISOString(),
-      ownerToken
+      image_url: upload.imageUrl,
+      public_id: upload.publicId,
+      owner_token: ownerToken,
+      created_at: new Date().toISOString()
     };
 
-    const posts = getStore();
-    posts.unshift(post);
+    const { data, error } = await supabase
+      .from(TABLE_NAME)
+      .insert(post)
+      .select("id,author,caption,image_url,owner_token,created_at")
+      .single();
+
+    if (error) {
+      await deleteImageFromCloudinary(upload.publicId);
+      throw new Error(error.message || "Failed to save post.");
+    }
 
     return NextResponse.json(
-      { message: "Image posted successfully.", post: toPublicPost(post, ownerToken) },
+      { message: "Image posted successfully.", post: toPublicPost(data, ownerToken) },
       { status: 201 }
     );
-  } catch {
-    return NextResponse.json({ message: "Could not post the image right now." }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json(
+      { message: getErrorMessage(error, "Could not post the image right now.") },
+      { status: 500 }
+    );
   }
 }
 
 export async function DELETE(request) {
+  const configError = getMediaConfigError();
+  if (configError) {
+    return NextResponse.json({ message: configError }, { status: 500 });
+  }
+
   try {
     const body = await request.json();
     const id = sanitize(body?.id, 120);
@@ -95,20 +141,36 @@ export async function DELETE(request) {
       return NextResponse.json({ message: "Owner token is required." }, { status: 400 });
     }
 
-    const posts = getStore();
-    const index = posts.findIndex((post) => post.id === id);
+    const supabase = getSupabaseAdmin();
+    const { data: post, error: readError } = await supabase
+      .from(TABLE_NAME)
+      .select("id,owner_token,public_id")
+      .eq("id", id)
+      .maybeSingle();
 
-    if (index < 0) {
+    if (readError) {
+      throw new Error(readError.message || "Failed to read post.");
+    }
+
+    if (!post) {
       return NextResponse.json({ message: "Post not found." }, { status: 404 });
     }
 
-    if (posts[index].ownerToken !== ownerToken) {
+    if (post.owner_token !== ownerToken) {
       return NextResponse.json({ message: "You can only delete your own post." }, { status: 403 });
     }
 
-    posts.splice(index, 1);
+    const { error: deleteError } = await supabase.from(TABLE_NAME).delete().eq("id", id);
+    if (deleteError) {
+      throw new Error(deleteError.message || "Failed to delete post.");
+    }
+
+    await deleteImageFromCloudinary(post.public_id);
     return NextResponse.json({ message: "Post deleted successfully." });
-  } catch {
-    return NextResponse.json({ message: "Could not delete this post right now." }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json(
+      { message: getErrorMessage(error, "Could not delete this post right now.") },
+      { status: 500 }
+    );
   }
 }

@@ -98,3 +98,39 @@ uvicorn python-backend.main:app --reload --port 8000
 
 When the contact form is submitted, data is saved in:
 `python-backend/contact_messages.db`
+
+## Permanent Gallery/Teachers Storage (Cloudinary + Supabase)
+
+The `/api/gallery` and `/api/teachers` routes now support permanent storage with Cloudinary (images) + Supabase (metadata).
+
+### 1) Install dependencies
+
+```bash
+npm i cloudinary @supabase/supabase-js
+```
+
+### 2) Configure `.env.local`
+
+Set these variables:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
+
+### 3) Create Supabase tables
+
+Run SQL from:
+
+`supabase/schema.sql`
+
+in your Supabase SQL editor.
+
+### 4) Restart app
+
+```bash
+npm run dev
+```
+
+If any storage env is missing, the gallery/teachers API returns a configuration error message.
