@@ -243,30 +243,21 @@ export async function POST(request) {
 
     const notificationIssues = [smsResult.reason, emailResult.reason].filter(Boolean).join(" | ");
 
-    if (!smsResult.sent && !emailResult.sent) {
-      return NextResponse.json(
-        {
-          message: "Could not deliver your message right now. Please try again.",
-          delivery: {
-            sms: smsResult.skipped ? "not_configured" : "failed",
-            email: emailResult.skipped ? "not_configured" : "failed"
-          },
-          notifications: notificationIssues || undefined
-        },
-        { status: 502 }
-      );
-    }
+    const delivery = {
+      sms: smsResult.sent ? "sent" : smsResult.skipped ? "not_configured" : "failed",
+      email: emailResult.sent ? "sent" : emailResult.skipped ? "not_configured" : "failed"
+    };
 
-    const userMessage = smsResult.sent
-      ? "Message sent successfully. We have received your contact request."
-      : "Message received by email, but SMS notification failed. Please check Twilio phone configuration.";
+    const allFailed = !smsResult.sent && !emailResult.sent;
+    const userMessage = allFailed
+      ? "Your request has been received, but notifications are temporarily unavailable. Please check server notification settings."
+      : smsResult.sent
+        ? "Message sent successfully. We have received your contact request."
+        : "Message received by email, but SMS notification failed. Please check Twilio phone configuration.";
 
     return NextResponse.json({
       message: userMessage,
-      delivery: {
-        sms: smsResult.sent ? "sent" : smsResult.skipped ? "not_configured" : "failed",
-        email: emailResult.sent ? "sent" : emailResult.skipped ? "not_configured" : "failed"
-      },
+      delivery,
       notifications: notificationIssues || undefined
     });
   } catch {
