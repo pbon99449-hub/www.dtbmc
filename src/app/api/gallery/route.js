@@ -8,6 +8,8 @@ import {
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
+const ALLOWED_REACTIONS = new Set(["❤️", "😂", "🔥", "😍", "👍"]);
+const MAX_REACTION_COUNT = 100000;
 const TABLE_NAME = "gallery_posts";
 
 function sanitize(value, max = 240) {
@@ -19,12 +21,37 @@ function getErrorMessage(error, fallback) {
   return message || fallback;
 }
 
+function isMissingReactionsColumnError(error) {
+  const message = String(error?.message || "");
+  return message.includes("Could not find the 'reactions' column of 'gallery_posts' in the schema cache");
+}
+
+function sanitizeReactions(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const reactions = {};
+  for (const [emoji, count] of Object.entries(value)) {
+    if (!ALLOWED_REACTIONS.has(emoji)) continue;
+    const numericCount = Number(count);
+    if (!Number.isFinite(numericCount)) continue;
+
+    const safeCount = Math.max(0, Math.floor(numericCount));
+    if (!safeCount) continue;
+    reactions[emoji] = Math.min(safeCount, MAX_REACTION_COUNT);
+  }
+
+  return reactions;
+}
+
 function toPublicPost(post, ownerToken = "") {
   return {
     id: post.id,
     author: post.author || "Anonymous",
     caption: post.caption || "New gallery post",
     imageUrl: post.image_url,
+    reactions: sanitizeReactions(post.reactions),
     createdAt: post.created_at,
     canDelete: !!ownerToken && post.owner_token === ownerToken
   };
@@ -42,14 +69,27 @@ export async function GET(request) {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from(TABLE_NAME)
-      .select("id,author,caption,image_url,owner_token,created_at")
+      .select("id,author,caption,image_url,reactions,owner_token,created_at")
       .order("created_at", { ascending: false });
 
-    if (error) {
+    if (error && !isMissingReactionsColumnError(error)) {
       throw new Error(error.message || "Failed to read posts.");
     }
 
-    return NextResponse.json({ posts: (data || []).map((post) => toPublicPost(post, ownerToken)) });
+    if (!error) {
+      return NextResponse.json({ posts: (data || []).map((post) => toPublicPost(post, ownerToken)) });
+    }
+
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from(TABLE_NAME)
+      .select("id,author,caption,image_url,owner_token,created_at")
+      .order("created_at", { ascending: false });
+
+    if (fallbackError) {
+      throw new Error(fallbackError.message || "Failed to read posts.");
+    }
+
+    return NextResponse.json({ posts: (fallbackData || []).map((post) => toPublicPost(post, ownerToken)) });
   } catch (error) {
     return NextResponse.json(
       { message: getErrorMessage(error, "Could not load gallery posts right now."), posts: [] },
@@ -96,27 +136,138 @@ export async function POST(request) {
       image_url: upload.imageUrl,
       public_id: upload.publicId,
       owner_token: ownerToken,
+      reactions: {},
       created_at: new Date().toISOString()
     };
 
     const { data, error } = await supabase
       .from(TABLE_NAME)
       .insert(post)
-      .select("id,author,caption,image_url,owner_token,created_at")
+      .select("id,author,caption,image_url,reactions,owner_token,created_at")
       .single();
 
-    if (error) {
+    if (!error) {
+      return NextResponse.json(
+        { message: "Image posted successfully.", post: toPublicPost(data, ownerToken) },
+        { status: 201 }
+      );
+    }
+
+    if (!isMissingReactionsColumnError(error)) {
       await deleteImageFromCloudinary(upload.publicId);
       throw new Error(error.message || "Failed to save post.");
     }
 
+    const fallbackPost = {
+      id: post.id,
+      author: post.author,
+      caption: post.caption,
+      image_url: post.image_url,
+      public_id: post.public_id,
+      owner_token: post.owner_token,
+      created_at: post.created_at
+    };
+
+    const { data: insertedFallback, error: fallbackError } = await supabase
+      .from(TABLE_NAME)
+      .insert(fallbackPost)
+      .select("id,author,caption,image_url,owner_token,created_at")
+      .single();
+
+    if (fallbackError) {
+      await deleteImageFromCloudinary(upload.publicId);
+      throw new Error(fallbackError.message || "Failed to save post.");
+    }
+
     return NextResponse.json(
-      { message: "Image posted successfully.", post: toPublicPost(data, ownerToken) },
+      {
+        message: "Image posted successfully. Enable reactions by running the latest database migration.",
+        post: toPublicPost(insertedFallback, ownerToken)
+      },
       { status: 201 }
     );
   } catch (error) {
     return NextResponse.json(
       { message: getErrorMessage(error, "Could not post the image right now.") },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request) {
+  const configError = getMediaConfigError();
+  if (configError) {
+    return NextResponse.json({ message: configError }, { status: 500 });
+  }
+
+  try {
+    const body = await request.json();
+    const id = sanitize(body?.id, 120);
+    const emoji = sanitize(body?.emoji, 8);
+    const previousEmoji = sanitize(body?.previousEmoji, 8);
+    const ownerToken = sanitize(body?.ownerToken, 160);
+
+    if (!id) {
+      return NextResponse.json({ message: "Post id is required." }, { status: 400 });
+    }
+
+    if (!ALLOWED_REACTIONS.has(emoji)) {
+      return NextResponse.json({ message: "Invalid emoji reaction." }, { status: 400 });
+    }
+
+    if (previousEmoji && !ALLOWED_REACTIONS.has(previousEmoji)) {
+      return NextResponse.json({ message: "Invalid previous emoji reaction." }, { status: 400 });
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { data: post, error: readError } = await supabase
+      .from(TABLE_NAME)
+      .select("id,reactions")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (readError && isMissingReactionsColumnError(readError)) {
+      return NextResponse.json(
+        { message: "Emoji reactions are not enabled yet. Please run the latest Supabase schema SQL." },
+        { status: 503 }
+      );
+    }
+
+    if (readError) {
+      throw new Error(readError.message || "Failed to read post.");
+    }
+
+    if (!post) {
+      return NextResponse.json({ message: "Post not found." }, { status: 404 });
+    }
+
+    const nextReactions = sanitizeReactions(post.reactions);
+    if (previousEmoji && previousEmoji !== emoji && (nextReactions[previousEmoji] || 0) > 0) {
+      nextReactions[previousEmoji] = Math.max((nextReactions[previousEmoji] || 0) - 1, 0);
+      if (!nextReactions[previousEmoji]) {
+        delete nextReactions[previousEmoji];
+      }
+    }
+    nextReactions[emoji] = Math.min((nextReactions[emoji] || 0) + 1, MAX_REACTION_COUNT);
+
+    const { data: updatedPost, error: updateError } = await supabase
+      .from(TABLE_NAME)
+      .update({ reactions: nextReactions })
+      .eq("id", id)
+      .select("id,author,caption,image_url,reactions,owner_token,created_at")
+      .single();
+
+    if (updateError) {
+      throw new Error(updateError.message || "Failed to update reaction.");
+    }
+
+    return NextResponse.json({
+      message: "Reaction added.",
+      post: toPublicPost(updatedPost, ownerToken)
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { message: getErrorMessage(error, "Could not update reaction right now.") },
       { status: 500 }
     );
   }

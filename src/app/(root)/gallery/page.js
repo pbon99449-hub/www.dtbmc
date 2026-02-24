@@ -23,14 +23,18 @@ const staticGalleryImages = [
   { id: 16, src: "/image/g9.jpg", alt: "Sports activity 9" }
 ];
 
+const REACTION_OPTIONS = ["❤️", "😂", "🔥", "😍", "👍"];
+
 export default function Gallery() {
   const [communityPosts, setCommunityPosts] = useState([]);
   const [form, setForm] = useState({ author: "", caption: "" });
   const [imageFile, setImageFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [ownerToken, setOwnerToken] = useState("");
+  const [userReactions, setUserReactions] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [reactingId, setReactingId] = useState("");
   const [status, setStatus] = useState({ type: "", text: "" });
 
   const canSubmit = useMemo(() => !!imageFile && !isSubmitting, [imageFile, isSubmitting]);
@@ -46,6 +50,19 @@ export default function Gallery() {
     const newToken = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
     window.localStorage.setItem(key, newToken);
     setOwnerToken(newToken);
+  }, []);
+
+  useEffect(() => {
+    const key = "gallery_user_reactions";
+    try {
+      const rawValue = window.localStorage.getItem(key);
+      const parsed = JSON.parse(rawValue || "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        setUserReactions(parsed);
+      }
+    } catch {
+      setUserReactions({});
+    }
   }, []);
 
   useEffect(() => {
@@ -181,6 +198,42 @@ export default function Gallery() {
     }
   };
 
+  const saveReactionMap = (nextValue) => {
+    setUserReactions(nextValue);
+    window.localStorage.setItem("gallery_user_reactions", JSON.stringify(nextValue));
+  };
+
+  const handleReaction = async (postId, emoji) => {
+    if (!postId || !emoji || reactingId) return;
+    const previousEmoji = userReactions[postId] || "";
+    if (previousEmoji === emoji) {
+      return;
+    }
+
+    setReactingId(postId);
+    setStatus({ type: "", text: "" });
+
+    try {
+      const response = await fetch("/api/gallery", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: postId, emoji, previousEmoji, ownerToken })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || "Could not react to this post.");
+      }
+
+      setCommunityPosts((prev) => prev.map((post) => (post.id === postId ? data.post : post)));
+      saveReactionMap({ ...userReactions, [postId]: emoji });
+    } catch (error) {
+      setStatus({ type: "error", text: error?.message || "Reaction failed." });
+    } finally {
+      setReactingId("");
+    }
+  };
+
   return (
     <main className="bg-[#DDF3FF] text-[#123B4A] py-20 px-6 md:px-20">
       <div className="max-w-6xl mx-auto text-center mb-12">
@@ -266,6 +319,29 @@ export default function Gallery() {
                   <p className="mt-2 text-xs text-[#256D86]">
                     Posted: {formatPostDate(post.createdAt) || "N/A"}
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {REACTION_OPTIONS.map((emoji) => {
+                      const count = Number(post?.reactions?.[emoji] || 0);
+                      const isSelected = userReactions[post.id] === emoji;
+                      const isDisabled = reactingId === post.id;
+
+                      return (
+                        <button
+                          key={`${post.id}-${emoji}`}
+                          type="button"
+                          disabled={isDisabled}
+                          onClick={() => handleReaction(post.id, emoji)}
+                          className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                            isSelected
+                              ? "border-[#2A7F9E] bg-[#4FBBC6] text-[#123B4A]"
+                              : "border-[#A9D4DE] bg-white text-[#123B4A] hover:border-[#4FBBC6]"
+                          } disabled:cursor-not-allowed disabled:opacity-70`}
+                        >
+                          {emoji} {count}
+                        </button>
+                      );
+                    })}
+                  </div>
                   {post.canDelete && (
                     <button
                       type="button"

@@ -7,6 +7,7 @@ create table if not exists public.gallery_posts (
   image_url text not null,
   public_id text not null,
   owner_token text not null,
+  reactions jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
@@ -42,6 +43,9 @@ create index if not exists letter_box_posts_created_at_idx on public.letter_box_
 -- Ensure latest schema on existing projects
 alter table public.teacher_posts
 add column if not exists phone text not null default '';
+
+alter table public.gallery_posts
+add column if not exists reactions jsonb not null default '{}'::jsonb;
 
 -- Optional check query (run separately if needed)
 -- select id, name, phone, subject
