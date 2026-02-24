@@ -268,12 +268,16 @@ export default function Contact() {
             className="w-full rounded-lg border border-[#A9D4DE] bg-[#EAFBFF] px-4 py-3 text-sm text-[#123B4A] outline-none focus:border-[#4FBBC6]"
           />
 
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImageChange}
-            className="w-full rounded-lg border border-[#A9D4DE] bg-[#EAFBFF] px-4 py-3 text-sm text-[#123B4A] outline-none focus:border-[#4FBBC6]"
-          />
+          <div className="w-full">
+            <label
+              htmlFor="contact-photo-upload"
+              className="inline-flex cursor-pointer items-center rounded-lg border border-[#A9D4DE] bg-[#EAFBFF] px-4 py-3 text-sm font-medium text-[#123B4A] hover:border-[#4FBBC6]"
+            >
+              আপনার ছবি দিন
+            </label>
+            <input id="contact-photo-upload" type="file" accept="image/*" onChange={handleImageChange} className="sr-only" />
+            <p className="mt-2 text-xs text-[#123B4A]">নির্বাচিত ছবি: {form.photoName || "প্রযোজ্য নয়"}</p>
+          </div>
           <input
             type="url"
             placeholder="ছবির পাবলিক লিংক (এসএমএস ছবির জন্য)"
@@ -284,7 +288,6 @@ export default function Contact() {
 
           {photoPreview && (
             <div className="md:col-span-2 overflow-hidden rounded-xl border border-[#A9D4DE] bg-white p-2">
-              <p className="mb-2 text-xs text-[#123B4A]">নির্বাচিত ছবি: {form.photoName || "প্রযোজ্য নয়"}</p>
               <img src={photoPreview} alt="ছবির প্রিভিউ" className="h-52 w-full rounded-lg object-cover" />
             </div>
           )}

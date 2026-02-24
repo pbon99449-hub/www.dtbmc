@@ -36,9 +36,17 @@ create table if not exists public.letter_box_posts (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.notices_posts (
+  id uuid primary key default gen_random_uuid(),
+  text text not null,
+  owner_token text not null,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists gallery_posts_created_at_idx on public.gallery_posts (created_at desc);
 create index if not exists teacher_posts_created_at_idx on public.teacher_posts (created_at desc);
 create index if not exists letter_box_posts_created_at_idx on public.letter_box_posts (created_at desc);
+create index if not exists notices_posts_created_at_idx on public.notices_posts (created_at desc);
 
 -- Ensure latest schema on existing projects
 alter table public.teacher_posts

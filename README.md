@@ -102,6 +102,7 @@ When the contact form is submitted, data is saved in:
 ## Permanent Gallery/Teachers Storage (Cloudinary + Supabase)
 
 The `/api/gallery` and `/api/teachers` routes now support permanent storage with Cloudinary (images) + Supabase (metadata).
+Home page latest notices (`/api/notices`) are also stored permanently in Supabase.
 
 ### 1) Install dependencies
 

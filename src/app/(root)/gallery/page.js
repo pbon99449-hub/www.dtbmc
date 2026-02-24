@@ -266,13 +266,22 @@ export default function Gallery() {
             onChange={(event) => setForm((prev) => ({ ...prev, caption: event.target.value }))}
             className="w-full rounded-lg border border-[#A9D4DE] bg-[#EAFBFF] px-4 py-3 text-sm outline-none focus:border-[#4FBBC6]"
           />
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
-            onChange={handleImageChange}
-            className="md:col-span-2 w-full rounded-lg border border-[#A9D4DE] bg-[#EAFBFF] px-4 py-3 text-sm outline-none focus:border-[#4FBBC6]"
-            required
-          />
+          <div className="md:col-span-2 w-full">
+            <label
+              htmlFor="gallery-photo-upload"
+              className="inline-flex cursor-pointer items-center rounded-lg border border-[#A9D4DE] bg-[#EAFBFF] px-4 py-3 text-sm font-medium text-[#123B4A] hover:border-[#4FBBC6]"
+            >
+              আপনার ছবি দিন
+            </label>
+            <input
+              id="gallery-photo-upload"
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+              onChange={handleImageChange}
+              className="sr-only"
+            />
+            <p className="mt-2 text-xs text-[#123B4A]">নির্বাচিত ছবি: {imageFile?.name || "প্রযোজ্য নয়"}</p>
+          </div>
           {previewUrl && (
             <div className="md:col-span-2 overflow-hidden rounded-xl border border-[#A9D4DE] bg-white p-2">
               <img src={previewUrl} alt="Preview" className="h-56 w-full rounded-lg object-cover" />
@@ -291,7 +300,7 @@ export default function Gallery() {
           disabled={!canSubmit}
           className="mt-5 rounded-lg bg-[#4FBBC6] px-5 py-3 text-sm font-semibold text-[#123B4A] hover:bg-[#399CA8] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSubmitting ? "Posting..." : "Post to Gallery"}
+          {isSubmitting ? "Posting..." : "গ্যালারিতে পোস্ট করুন"}
         </button>
       </motion.form>
 
