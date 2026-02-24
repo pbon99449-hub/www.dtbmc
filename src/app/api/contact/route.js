@@ -29,6 +29,16 @@ function parseImageDataUrl(dataUrl) {
   };
 }
 
+function getResendFromAddress() {
+  const rawFrom = sanitize(process.env.RESEND_FROM_EMAIL, 320);
+  const fromName = sanitize(process.env.RESEND_FROM_NAME, 120) || "DTBMC";
+
+  if (!rawFrom) return "";
+  if (rawFrom.includes("<") && rawFrom.includes(">")) return rawFrom;
+
+  return `${fromName} <${rawFrom}>`;
+}
+
 function normalizePhoneNumber(raw) {
   const value = String(raw || "").trim().replace(/[\s()-]/g, "");
   if (!value) return "";
@@ -108,7 +118,7 @@ async function sendSmsWithTwilio(messageBody, mediaUrl = "") {
 }
 
 async function sendEmailWithResend({ subject, text, html, attachments }) {
-  const from = process.env.RESEND_FROM_EMAIL;
+  const from = getResendFromAddress();
   const to = process.env.RESEND_TO_EMAIL || process.env.CONTACT_NOTIFY_EMAIL;
 
   if (!resend || !from || !to) {

@@ -49,6 +49,7 @@ Copy `.env.example` to `.env.local` and set:
 - `TWILIO_TO_NUMBER`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
+- `RESEND_FROM_NAME` (optional, default: `DTBMC`)
 - `RESEND_TO_EMAIL` (or `CONTACT_NOTIFY_EMAIL`)
 
 ### 2) Node.js backend (default)
